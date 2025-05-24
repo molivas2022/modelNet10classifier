@@ -1,5 +1,6 @@
 import os
-from enum import Enum
+from enum import Enum, auto
+from random import Random
 import torch
 from torch.utils.data import Dataset
 import open3d as o3d
@@ -8,10 +9,13 @@ import numpy as np
 ROOT_DIR = os.getcwd()
 DATASET_DIR = os.path.join(ROOT_DIR, "ModelNet10", "pcd")
 
+VALIDATION_SEED = 0x5EED    # Un número arbitario que determina la partición del set de validación
+VALIDATION_RATIO = 0.2
+
 class ModelNetClass(Enum):
     def __init__(self, label, train_size, test_size):
         self._label = label
-        self._train_size = train_size
+        self._train_size = train_size   # train + validation
         self._test_size = test_size
     
     BATHTUB = ('bathtub', 106, 50)
@@ -33,6 +37,13 @@ class ModelNetClass(Enum):
     def train_size(self):
         return self._train_size
     @property
+    def effective_train_size(self):
+        return self.train_size - self.validation_size
+    @property
+    def validation_size(self):
+        train_size = self.train_size
+        return int(train_size * VALIDATION_RATIO)
+    @property
     def test_size(self):
         return self._test_size
     @property
@@ -50,6 +61,14 @@ class ModelNetClass(Enum):
                 files.append(file)
         return files
     @property
+    def effective_train_files(self):
+        return [file for file in self.train_files if file not in self.validation_files]
+    @property
+    def validation_files(self):
+        train_files = self.train_files
+        rng = Random(VALIDATION_SEED)
+        return rng.sample(train_files, self.validation_size)
+    @property
     def test_files(self):
         path = self.test_path
         files = list()
@@ -58,23 +77,29 @@ class ModelNetClass(Enum):
                 files.append(file)
         return files
 
+class DatasetType(Enum):
+    TRAIN = auto()
+    VALIDATION = auto()
+    TEST = auto()
 
 class ModelNet(Dataset):
-    def __init__(self, classes: list[ModelNetClass], train: bool, test: bool):
-        if not (train or test):
-            raise Exception("Error creating instance of ModelNet dataset:" +
-                            "'train' and 'test' cannot both be false at the same time")
-        
+    def __init__(self, classes: list[ModelNetClass], type: DatasetType):
         X = list()
         y = list()
         for i in range(len(classes)):
-            if train:
-                for file in classes[i].train_files:
+            if type == DatasetType.TRAIN:
+                for file in classes[i].effective_train_files:
                     pcd = o3d.io.read_point_cloud(file.path)
                     points = np.asarray(pcd.points, dtype=float)
                     X.append(points)
                     y.append(i)
-            if test:
+            if type == DatasetType.VALIDATION:
+                for file in classes[i].validation_files:
+                    pcd = o3d.io.read_point_cloud(file.path)
+                    points = np.asarray(pcd.points, dtype=float)
+                    X.append(points)
+                    y.append(i)
+            if type == DatasetType.TEST:
                 for file in classes[i].test_files:
                     pcd = o3d.io.read_point_cloud(file.path)
                     points = np.asarray(pcd.points, dtype=float)
