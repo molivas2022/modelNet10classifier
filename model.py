@@ -110,6 +110,7 @@ class PointnetClassifier(nn.Module):
         self.bn_linear1 = nn.BatchNorm1d(512)
         self.bn_linear2 = nn.BatchNorm1d(256)
         self.dropout = nn.Dropout(p=0.3)
+        #self.dropout = nn.Dropout(p=0.2)
 
         # Output layer
         self.linear3 = nn.Linear(256, num_classes)
@@ -185,15 +186,19 @@ class PointNetLoss(nn.Module):
         
         # Probabilidades predichas
         pn = F.softmax(predictions, dim=1)
-        pn.gather(1, targets.view(-1, 1)).view(-1)
 
+        # Probabilidad de clase target (ground truth)
+        pn = pn.gather(1, targets.view(-1, 1)).view(-1)
+
+        # Factor de regularización matriz transformación
+        reg = 0.0
         if self.reg_weight > 0:
-            I = torch.eye(64).unsqueeze(0).repeat(A.shape[0], 1, 1)
+            I = torch.eye(A.size(1)).unsqueeze(0).repeat(A.size(0), 1, 1)
             if A.is_cuda:
                 I = I.cuda()
             reg = torch.linalg.norm(I - torch.bmm(A, A.transpose(2, 1)))
             reg = self.reg_weight * reg / batch_size
-
+        
         focal_loss = ((1 - pn)**self.gamma * ce_loss)
         if self.size_average:
             return focal_loss.mean() + reg
