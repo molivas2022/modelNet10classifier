@@ -57,7 +57,8 @@ class Tnet(nn.Module):
         # Reshape de 'T-Net(x)' a una matriz
         x = x.view(-1, self.dim, self.dim)
         # Le sumamos la matriz identidad para mayor estabilidad
-        iden = torch.eye(self.dim, requires_grad=True).repeat(bs, 1, 1)
+        #iden = torch.eye(self.dim, requires_grad=True).repeat(bs, 1, 1)
+        iden = torch.eye(self.dim).repeat(bs, 1, 1).to(x.device)
         if x.is_cuda:
             iden = iden.cuda()
         x += iden
@@ -122,7 +123,7 @@ class PointnetClassifier(nn.Module):
 
         # Transformación del input
         input_matrix = self.input_transform(x)
-        # x = torch.bmm(x.tranpose(2, 1), input_matrix).tranpose(2, 1)
+        # x = torch.bmm(x.transpose(2, 1), input_matrix).tranpose(2, 1)
         x = torch.transpose(torch.bmm(torch.transpose(x, 2, 1), input_matrix), 2, 1)
 
         # Paso a través de las primeras MLPs compartidas
@@ -157,6 +158,7 @@ class PointnetClassifier(nn.Module):
 """
 Args:
     alpha            El peso de las clases para pérdida CrossEntropy.
+    gamma            Peso para la pérdida focal.
     reg_weight       Peso de regularización.
     size_average     Booleano que define si es que la pérdida final se computa como promedio o no.
 """
@@ -175,9 +177,10 @@ class PointNetLoss(nn.Module):
         if isinstance(alpha, (list, np.ndarray)):
             self.alpha = torch.Tensor(alpha)
 
-        self.cross_entropy_loss = nn.CrossEntropyLoss(weight=self.alpha)
+        #self.cross_entropy_loss = nn.CrossEntropyLoss(weight=self.alpha)
+        self.cross_entropy_loss = nn.CrossEntropyLoss(weight=self.alpha, reduction="none")
 
-    def forward(self, predictions, targets, A):
+    def forward(self, predictions, targets, A, is_train=True):
         # tamaño de batch
         batch_size = predictions.size(0)
 
@@ -192,12 +195,16 @@ class PointNetLoss(nn.Module):
 
         # Factor de regularización matriz transformación
         reg = 0.0
-        if self.reg_weight > 0:
+        if self.reg_weight > 0 and is_train:
             I = torch.eye(A.size(1)).unsqueeze(0).repeat(A.size(0), 1, 1)
             if A.is_cuda:
                 I = I.cuda()
-            reg = torch.linalg.norm(I - torch.bmm(A, A.transpose(2, 1)))
-            reg = self.reg_weight * reg / batch_size
+
+            # Se computa una matriz I - A para cada elemento del batch
+            diff = I - torch.bmm(A, A.transpose(2, 1)) # shape (B, 64, 64)
+            norms = torch.linalg.norm(diff, dim=(1, 2)) # shape (B,)
+            reg = norms.mean()
+            reg = self.reg_weight * reg
         
         focal_loss = ((1 - pn)**self.gamma * ce_loss)
         if self.size_average:
