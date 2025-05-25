@@ -59,7 +59,7 @@ class ModelNetClass(Enum):
         for file in os.scandir(path):  
             if ".pcd" in str(file):
                 files.append(file)
-        return files
+        return sorted(files, key=lambda f: f.name)
     @property
     def effective_train_files(self):
         return [file for file in self.train_files if file not in self.validation_files]
