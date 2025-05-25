@@ -75,7 +75,7 @@ class ModelNetClass(Enum):
         for file in os.scandir(path):  
             if ".pcd" in str(file):
                 files.append(file)
-        return files
+        return sorted(files, key=lambda f: f.name)
 
 class DatasetType(Enum):
     TRAIN = auto()
