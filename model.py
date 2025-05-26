@@ -25,9 +25,9 @@ class Tnet(nn.Module):
         self.shared_mlp1 = nn.Conv1d(dim, 64, kernel_size=1)
         self.shared_mlp2 = nn.Conv1d(64, 128, kernel_size=1)
         self.shared_mlp3 = nn.Conv1d(128, 1024, kernel_size=1)
-        self.bn1 = nn.BatchNorm1d(64)
-        self.bn2 = nn.BatchNorm1d(128)
-        self.bn3 = nn.BatchNorm1d(1024)
+        self.gn1 = nn.GroupNorm(8, 64)
+        self.gn2 = nn.GroupNorm(8, 128)
+        self.gn3 = nn.GroupNorm(8, 1024)
 
         self.max_pool = nn.MaxPool1d(kernel_size=num_points)
 
@@ -35,23 +35,23 @@ class Tnet(nn.Module):
         self.linear1 = nn.Linear(1024, 512)
         self.linear2 = nn.Linear(512, 256)
         self.linear3 = nn.Linear(256, dim**2)
-        self.bn4 = nn.BatchNorm1d(512)
-        self.bn5 = nn.BatchNorm1d(256)
+        self.gn4 = nn.GroupNorm(8, 512)
+        self.gn5 = nn.GroupNorm(8, 256)
     
     def forward(self, x):
         bs = x.shape[0]
 
         # Paso a través de las MLPs compartidas
-        x = self.bn1(self.act(self.shared_mlp1(x)))
-        x = self.bn2(self.act(self.shared_mlp2(x)))
-        x = self.bn3(self.act(self.shared_mlp3(x)))
+        x = self.gn1(self.act(self.shared_mlp1(x)))
+        x = self.gn2(self.act(self.shared_mlp2(x)))
+        x = self.gn3(self.act(self.shared_mlp3(x)))
 
         # Max pool
         x = self.max_pool(x).view(bs, -1)
         
         # Paso a través de las MLPs no compartidas
-        x = self.bn4(self.act(self.linear1(x)))
-        x = self.bn5(self.act(self.linear2(x)))
+        x = self.gn4(self.act(self.linear1(x)))
+        x = self.gn5(self.act(self.linear2(x)))
         x = self.linear3(x)
         
         # Reshape de 'T-Net(x)' a una matriz
@@ -88,8 +88,8 @@ class PointnetClassifier(nn.Module):
         # Primera MLP compartida, transforma los puntos de la entrada en features
         self.shared_mlp1 = nn.Conv1d(3, 64, kernel_size=1)
         self.shared_mlp2 = nn.Conv1d(64, 64, kernel_size=1)
-        self.bn1 = nn.BatchNorm1d(64)
-        self.bn2 = nn.BatchNorm1d(64)
+        self.gn1 = nn.GroupNorm(8, 64)
+        self.gn2 = nn.GroupNorm(8, 64)
 
         # T-Net en las features
         self.feature_transform = Tnet(64, num_points)
@@ -98,9 +98,9 @@ class PointnetClassifier(nn.Module):
         self.shared_mlp3 = nn.Conv1d(64, 64, kernel_size=1)
         self.shared_mlp4 = nn.Conv1d(64, 128, kernel_size=1)
         self.shared_mlp5 = nn.Conv1d(128, num_global_feats, kernel_size=1)
-        self.bn3 = nn.BatchNorm1d(64)
-        self.bn4 = nn.BatchNorm1d(128)
-        self.bn5 = nn.BatchNorm1d(num_global_feats)
+        self.gn3 = nn.GroupNorm(8, 64)
+        self.gn4 = nn.GroupNorm(8, 128)
+        self.gn5 = nn.GroupNorm(8, num_global_feats)
         # Max pool para extraer las features globales
         # Devolver los indices nos permite ver los indices críticos que determinan las features globales
         self.max_pool = nn.MaxPool1d(kernel_size=num_points, return_indices=True)
@@ -108,8 +108,8 @@ class PointnetClassifier(nn.Module):
         # MLP para clasificación
         self.linear1 = nn.Linear(num_global_feats, 512)
         self.linear2 = nn.Linear(512, 256)
-        self.bn_linear1 = nn.BatchNorm1d(512)
-        self.bn_linear2 = nn.BatchNorm1d(256)
+        self.gn_linear1 = nn.GroupNorm(8, 512)
+        self.gn_linear2 = nn.GroupNorm(8, 256)
         self.dropout = nn.Dropout(p=0.3)
         #self.dropout = nn.Dropout(p=0.2)
 
@@ -127,8 +127,8 @@ class PointnetClassifier(nn.Module):
         x = torch.transpose(torch.bmm(torch.transpose(x, 2, 1), input_matrix), 2, 1)
 
         # Paso a través de las primeras MLPs compartidas
-        x = self.bn1(self.act(self.shared_mlp1(x)))
-        x = self.bn2(self.act(self.shared_mlp2(x)))
+        x = self.gn1(self.act(self.shared_mlp1(x)))
+        x = self.gn2(self.act(self.shared_mlp2(x)))
 
         # Transformación de features
         feature_matrix = self.feature_transform(x)
@@ -136,17 +136,17 @@ class PointnetClassifier(nn.Module):
         x = torch.transpose(torch.bmm(torch.transpose(x, 2, 1), feature_matrix), 2, 1)
 
         # Paso a través de las segundas MLPs compartidas
-        x = self.bn3(self.act(self.shared_mlp3(x)))
-        x = self.bn4(self.act(self.shared_mlp4(x)))
-        x = self.bn5(self.act(self.shared_mlp5(x)))
+        x = self.gn3(self.act(self.shared_mlp3(x)))
+        x = self.gn4(self.act(self.shared_mlp4(x)))
+        x = self.gn5(self.act(self.shared_mlp5(x)))
 
         global_features, critical_indexes = self.max_pool(x)
         global_features = global_features.view(bs, -1)
         critical_indexes = critical_indexes.view(bs, -1)
 
         # Clasificación
-        x = self.bn_linear1(self.act(self.linear1(global_features)))
-        x = self.bn_linear2(self.act(self.linear2(x)))
+        x = self.gn_linear1(self.act(self.linear1(global_features)))
+        x = self.gn_linear2(self.act(self.linear2(x)))
         x = self.dropout(x)
         x = self.linear3(x)
 
