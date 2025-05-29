@@ -3,6 +3,7 @@ from enum import Enum, auto
 from random import Random
 import torch
 from torch.utils.data import Dataset
+from utils.data_processing import normalize_points
 import open3d as o3d
 import numpy as np
 
@@ -17,6 +18,7 @@ class ModelNetClass(Enum):
         self._label = label
         self._train_size = train_size   # train + validation
         self._test_size = test_size
+
     
     BATHTUB = ('bathtub', 106, 50)
     BED = ('bed', 515, 100)
@@ -83,7 +85,7 @@ class DatasetType(Enum):
     TEST = auto()
 
 class ModelNet(Dataset):
-    def __init__(self, classes: list[ModelNetClass], type: DatasetType):
+    def __init__(self, classes: list[ModelNetClass], type: DatasetType, normalize=False):
         X = list()
         y = list()
         for i in range(len(classes)):
@@ -91,25 +93,37 @@ class ModelNet(Dataset):
                 for file in classes[i].effective_train_files:
                     pcd = o3d.io.read_point_cloud(file.path)
                     points = np.asarray(pcd.points, dtype=float)
+                    if normalize:
+                        points = normalize_points(points)
+
                     X.append(points)
                     y.append(i)
             if type == DatasetType.VALIDATION:
                 for file in classes[i].validation_files:
                     pcd = o3d.io.read_point_cloud(file.path)
                     points = np.asarray(pcd.points, dtype=float)
+                    if normalize:
+                        points = normalize_points(points)
+
                     X.append(points)
                     y.append(i)
             if type == DatasetType.TEST:
                 for file in classes[i].test_files:
                     pcd = o3d.io.read_point_cloud(file.path)
                     points = np.asarray(pcd.points, dtype=float)
+                    if normalize:
+                        points = normalize_points(points)
+
                     X.append(points)
                     y.append(i)
+
         
         X = np.transpose(X, (0, 2, 1))
         
         self._X = torch.tensor(X, dtype=torch.float32)
         self._y = torch.tensor(y, dtype=torch.long)
+
+
 
     def __len__(self):
         return len(self._X)
