@@ -1,9 +1,10 @@
 import os
 from enum import Enum, auto
 from random import Random
+from typing import List
 import torch
 from torch.utils.data import Dataset
-from utils.data_processing import normalize_points
+from utils.transformation import Transformation
 import open3d as o3d
 import numpy as np
 
@@ -85,45 +86,34 @@ class DatasetType(Enum):
     TEST = auto()
 
 class ModelNet(Dataset):
-    def __init__(self, classes: list[ModelNetClass], type: DatasetType, normalize=False):
+    def __init__(self,
+                 classes: list[ModelNetClass],
+                 type: DatasetType,
+                 transformations: List[Transformation] =[]):
+        
         X = list()
         y = list()
         for i in range(len(classes)):
-            if type == DatasetType.TRAIN:
-                for file in classes[i].effective_train_files:
-                    pcd = o3d.io.read_point_cloud(file.path)
-                    points = np.asarray(pcd.points, dtype=float)
-                    if normalize:
-                        points = normalize_points(points)
+            match type:
+                case DatasetType.TRAIN:
+                    files = classes[i].effective_train_files
+                case DatasetType.VALIDATION:
+                    files = classes[i].validation_files
+                case DatasetType.TEST:
+                    files = classes[i].test_files
 
-                    X.append(points)
-                    y.append(i)
-            if type == DatasetType.VALIDATION:
-                for file in classes[i].validation_files:
-                    pcd = o3d.io.read_point_cloud(file.path)
-                    points = np.asarray(pcd.points, dtype=float)
-                    if normalize:
-                        points = normalize_points(points)
-
-                    X.append(points)
-                    y.append(i)
-            if type == DatasetType.TEST:
-                for file in classes[i].test_files:
-                    pcd = o3d.io.read_point_cloud(file.path)
-                    points = np.asarray(pcd.points, dtype=float)
-                    if normalize:
-                        points = normalize_points(points)
-
-                    X.append(points)
-                    y.append(i)
-
+            for file in files:
+                pcd = o3d.io.read_point_cloud(file.path)
+                points = np.asarray(pcd.points, dtype=float)
+                for t in transformations:
+                    points = t.transform(points)
+                X.append(points)
+                y.append(i)
         
         X = np.transpose(X, (0, 2, 1))
         
         self._X = torch.tensor(X, dtype=torch.float32)
         self._y = torch.tensor(y, dtype=torch.long)
-
-
 
     def __len__(self):
         return len(self._X)
