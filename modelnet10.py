@@ -89,6 +89,7 @@ class ModelNet(Dataset):
     def __init__(self,
                  classes: list[ModelNetClass],
                  type: DatasetType,
+                 repetitions: int,
                  transformations: List[Transformation] =[]):
         
         X = list()
@@ -105,10 +106,12 @@ class ModelNet(Dataset):
             for file in files:
                 pcd = o3d.io.read_point_cloud(file.path)
                 points = np.asarray(pcd.points, dtype=float)
-                for t in transformations:
-                    points = t.transform(points)
-                X.append(points)
-                y.append(i)
+                for _ in range(repetitions):
+                    _points = np.copy(points)
+                    for t in transformations:
+                        _points = t.transform(_points)
+                    X.append(_points)
+                    y.append(i)
         
         X = np.transpose(X, (0, 2, 1))
         
