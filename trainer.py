@@ -133,7 +133,8 @@ class PointNetTrainer:
                 self.best_model_loss = val_loss
                 self.best_model_acc = val_acc
                 self.best_model_epoch = epoch
-                self._save_checkpoint(epoch, f"{self.name}_best_model")
+                #self._save_checkpoint(epoch, f"{self.name}_best_model")
+                self._save_checkpoint(0, f"{self.name}_best_model")
         
         save_loss_dict(self.loss_dict, path=f"{self.name}_loss_dict.csv")
         return self.loss_dict, self.best_model_epoch, self.best_model_loss, self.best_model_acc

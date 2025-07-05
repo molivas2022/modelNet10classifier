@@ -158,8 +158,9 @@ Args:
     num_classes: número de categorias de clasificación
 """
 class PointNetClassifier(nn.Module):
-    def __init__(self, dim, num_points, num_global_feats, num_classes):
+    def __init__(self, dim, num_points, num_global_feats, num_classes, ignore_Tnet=False):
         super(PointNetClassifier, self).__init__()
+        self.ignore_Tnet = ignore_Tnet
 
         # Función de activación
         self.act = F.relu
@@ -203,19 +204,21 @@ class PointNetClassifier(nn.Module):
         # Tamaño del batch, es decir cuantos ejemplos hay en el batch
         bs = x.shape[0]
 
-        # Transformación del input
-        input_matrix = self.input_transform(x)
-        # x = torch.bmm(x.transpose(2, 1), input_matrix).tranpose(2, 1)
-        x = torch.transpose(torch.bmm(torch.transpose(x, 2, 1), input_matrix), 2, 1)
+        if not self.ignore_Tnet:
+            # Transformación del input
+            input_matrix = self.input_transform(x)
+            # x = torch.bmm(x.transpose(2, 1), input_matrix).tranpose(2, 1)
+            x = torch.transpose(torch.bmm(torch.transpose(x, 2, 1), input_matrix), 2, 1)
 
         # Paso a través de las primeras MLPs compartidas
         x = self.bn1(self.act(self.shared_mlp1(x)))
         x = self.bn2(self.act(self.shared_mlp2(x)))
 
-        # Transformación de features
-        feature_matrix = self.feature_transform(x)
-        # x = torch.bmm(x.tranpose(2, 1), feature_matrix).tranpose(2, 1)
-        x = torch.transpose(torch.bmm(torch.transpose(x, 2, 1), feature_matrix), 2, 1)
+        if not self.ignore_Tnet:
+            # Transformación de features
+            feature_matrix = self.feature_transform(x)
+            # x = torch.bmm(x.tranpose(2, 1), feature_matrix).tranpose(2, 1)
+            x = torch.transpose(torch.bmm(torch.transpose(x, 2, 1), feature_matrix), 2, 1)
 
         # Paso a través de las segundas MLPs compartidas
         x = self.bn3(self.act(self.shared_mlp3(x)))
@@ -233,7 +236,10 @@ class PointNetClassifier(nn.Module):
         x = self.linear3(x)
 
         # Devolver logits
-        return x, critical_indexes, feature_matrix
+        if not self.ignore_Tnet:
+            return x, critical_indexes, feature_matrix
+        else:
+            return x, critical_indexes, None
 
 
 
