@@ -83,28 +83,6 @@ class KANShared(nn.Module):
         return y
 
 
-## PointNetKAN
-class PointNetKAN(nn.Module):
-    def __init__(self, input_channels, output_channels, scaling=3.0):
-        super(PointNetKAN, self).__init__()
-
-        self.jacobikan5 = KANShared(input_channels, int(1024 * scaling), 4)
-        self.jacobikan6 = KAN(int(1024 * scaling), output_channels, 4)
-
-        self.bn5 = nn.BatchNorm1d(int(1024 * scaling))
-
-    def forward(self, x):
-
-        x = self.jacobikan5(x)
-        x = self.bn5(x)
-
-        global_feature = F.max_pool1d(x, kernel_size=x.size(-1)).squeeze(-1)
-
-        x = self.jacobikan6(global_feature)
-
-        # Los modelos que hemos estado usando outputtean critical points y la matriz de transformación,
-        # por ahora PointNetKAN no hace las dos últimas, y este es un parche de adaptabilidad.
-        return x, None, None
 
 
 ## T-net
@@ -256,6 +234,36 @@ class PointNetClassifier(nn.Module):
 
         # Devolver logits
         return x, critical_indexes, feature_matrix
+
+
+
+
+## PointNetKAN
+class PointNetKAN(nn.Module):
+    def __init__(self, input_channels, num_points, num_classes, scaling=3.0):
+        super(PointNetKAN, self).__init__()
+
+        # T-Net en los puntos de la entrada
+        self.input_transform = Tnet(input_channels, num_points)
+
+        self.jacobikan5 = KANShared(input_channels, int(num_points * scaling), 4)
+        self.jacobikan6 = KAN(int(num_points * scaling), num_classes, 4)
+
+        self.bn5 = nn.BatchNorm1d(int(num_points * scaling))
+
+    def forward(self, x):
+
+        input_matrix = self.input_transform(x)
+        x = self.jacobikan5(input_matrix)
+        x = self.bn5(x)
+
+        global_feature = F.max_pool1d(x, kernel_size=x.size(-1)).squeeze(-1)
+
+        x = self.jacobikan6(global_feature)
+
+        # Los modelos que hemos estado usando outputtean critical points y la matriz de transformación,
+        # por ahora PointNetKAN no hace las dos últimas, y este es un parche de adaptabilidad.
+        return x, None, None
 
 
 # Clase para el cómputo de la pérdida
