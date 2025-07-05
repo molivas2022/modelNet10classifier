@@ -3,6 +3,88 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+
+## KAN, créditos a Ali Kashefi (https://github.com/Ali-Stanford/PointNet_KAN_Graphic)
+"""
+
+Args:
+    input_dim: 
+    num_points: output_dim
+    degree: 
+    a: alpha en el polinomio de Jacaboi
+    b: beta en el polinomio de Jacaboi
+"""
+class KAN(nn.Module):
+    def __init__(self, input_dim, output_dim, degree, a=1.0, b=1.0):
+        super(KAN, self).__init__()
+        self.input_dim = input_dim
+        self.output_dim = output_dim
+        self.a = a
+        self.b = b
+        self.degree = degree
+        
+        self.jacobi_coeffs = nn.Parameter(torch.empty(input_dim, output_dim, degree + 1))
+
+        # Inicializamos los coeficientes
+        nn.init.normal_(self.jacobi_coeffs, mean=0.0, std=1/(input_dim * (degree + 1)))
+
+    def forward(self, x):
+        x = torch.reshape(x, (-1, self.input_dim))
+
+        x = torch.tanh(x)
+
+        jacobi = torch.ones(x.shape[0], self.input_dim, self.degree + 1, device=x.device)
+
+        if self.degree > 0:
+            jacobi[:, :, 1]= ((self.a - self.b) + (self.a + self.b + 2) * x) / 2
+
+        
+        # No preguntes.
+        for i in range(2, self.degree + 1):
+            A = (2*i + self.a + self.b - 1)*(2*i + self.a + self.b)/((2*i) * (i + self.a + self.b))
+            B = (2*i + self.a + self.b - 1)*(self.a**2 - self.b**2)/((2*i)*(i + self.a + self.b)*(2*i+self.a+self.b-2))
+            C = -2*(i + self.a -1)*(i + self.b -1)*(2*i + self.a + self.b)/((2*i)*(i + self.a + self.b)*(2*i + self.a + self.b -2))
+            jacobi[:, :, i] = (A*x + B)*jacobi[:, :, i-1].clone() + C*jacobi[:, :, i-2].clone()
+
+        y = torch.einsum('bid,iod->bo', jacobi, self.jacobi_coeffs)
+        y = y.view(-1, self.output_dim)
+        return y
+
+class KANShared(nn.Module):
+    def __init__(self, input_dim, output_dim, degree, a=1.0, b=1.0):
+        super(KANShared, self).__init__()
+        self.input_dim = input_dim
+        self.output_dim = output_dim
+        self.a = a
+        self.b = b
+        self.degree = degree
+
+        self.jacobi_coeffs = nn.Parameter(torch.empty(input_dim, output_dim, degree + 1))
+        nn.init.normal_(self.jacobi_coeffs, mean=0.0, std=1/(input_dim * (degree + 1)))
+
+    def forward(self, x):
+        batch_size, input_dim, num_points = x.shape
+        x = x.permute(0, 2, 1).contiguous() 
+        x = torch.tanh(x) 
+
+        jacobi = torch.ones(batch_size, num_points, self.input_dim, self.degree + 1, device=x.device)
+
+        if self.degree > 0:
+            jacobi[:, :, :, 1] = ((self.a - self.b) + (self.a + self.b + 2) * x) / 2
+
+        for i in range(2, self.degree + 1):
+            A = (2*i + self.a + self.b - 1)*(2*i + self.a + self.b)/((2*i) * (i + self.a + self.b))
+            B = (2*i + self.a + self.b - 1)*(self.a**2 - self.b**2)/((2*i)*(i + self.a + self.b)*(2*i+self.a+self.b-2))
+            C = -2*(i + self.a -1)*(i + self.b -1)*(2*i + self.a + self.b)/((2*i)*(i + self.a + self.b)*(2*i + self.a + self.b -2))
+            jacobi[:, :, :, i] = (A*x + B)*jacobi[:, :, :, i-1].clone() + C*jacobi[:, :, :, i-2].clone()
+
+        jacobi = jacobi.permute(0, 2, 3, 1)  
+        y = torch.einsum('bids,iod->bos', jacobi, self.jacobi_coeffs) 
+        return y
+
+
+
+
 ## T-net
 """
 T-net es una 'mini-red' que aprende una matriz de transformación de tamaño
@@ -75,9 +157,9 @@ Args:
     num_global_feats: número de features globales que determinará la red
     num_classes: número de categorias de clasificación
 """
-class PointnetClassifier(nn.Module):
+class PointNetClassifier(nn.Module):
     def __init__(self, dim, num_points, num_global_feats, num_classes):
-        super(PointnetClassifier, self).__init__()
+        super(PointNetClassifier, self).__init__()
 
         # Función de activación
         self.act = F.relu
@@ -152,6 +234,36 @@ class PointnetClassifier(nn.Module):
 
         # Devolver logits
         return x, critical_indexes, feature_matrix
+
+
+
+
+## PointNetKAN
+class PointNetKAN(nn.Module):
+    def __init__(self, input_channels, num_points, num_classes, scaling=3.0):
+        super(PointNetKAN, self).__init__()
+
+        # T-Net en los puntos de la entrada
+        self.input_transform = Tnet(input_channels, num_points)
+
+        self.jacobikan5 = KANShared(input_channels, int(num_points * scaling), 4)
+        self.jacobikan6 = KAN(int(num_points * scaling), num_classes, 4)
+
+        self.bn5 = nn.BatchNorm1d(int(num_points * scaling))
+
+    def forward(self, x):
+
+        input_matrix = self.input_transform(x)
+        x = self.jacobikan5(input_matrix)
+        x = self.bn5(x)
+
+        global_feature = F.max_pool1d(x, kernel_size=x.size(-1)).squeeze(-1)
+
+        x = self.jacobikan6(global_feature)
+
+        # Los modelos que hemos estado usando outputtean critical points y la matriz de transformación,
+        # por ahora PointNetKAN no hace las dos últimas, y este es un parche de adaptabilidad.
+        return x, None, None
 
 
 # Clase para el cómputo de la pérdida
