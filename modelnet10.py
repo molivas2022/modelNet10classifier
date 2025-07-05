@@ -89,8 +89,9 @@ class ModelNet(Dataset):
     def __init__(self,
                  classes: list[ModelNetClass],
                  type: DatasetType,
-                 repetitions: int,
-                 transformations: List[Transformation] =[]):
+                 repetitions: int =0,
+                 transformations: List[Transformation] =[],
+                 preserve_original: bool=True):
         
         X = list()
         y = list()
@@ -111,6 +112,9 @@ class ModelNet(Dataset):
                     for t in transformations:
                         _points = t.transform(_points)
                     X.append(_points)
+                    y.append(i)
+                if preserve_original:
+                    X.append(points)
                     y.append(i)
         
         X = np.transpose(X, (0, 2, 1))
