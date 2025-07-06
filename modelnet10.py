@@ -4,7 +4,7 @@ from random import Random
 from typing import List
 import torch
 from torch.utils.data import Dataset
-from utils.transformation import Transformation
+from utils.transformation import Transformation, Normalization
 import open3d as o3d
 import numpy as np
 
@@ -91,6 +91,7 @@ class ModelNet(Dataset):
                  type: DatasetType,
                  repetitions: int =0,
                  transformations: List[Transformation] =[],
+                 normalize: bool=True,
                  preserve_original: bool=True):
         
         X = list()
@@ -111,9 +112,13 @@ class ModelNet(Dataset):
                     _points = np.copy(points)
                     for t in transformations:
                         _points = t.transform(_points)
+                    if normalize:
+                        _points = Normalization.transform(_points)
                     X.append(_points)
                     y.append(i)
                 if preserve_original:
+                    if normalize:
+                        points = Normalization.transform(points)
                     X.append(points)
                     y.append(i)
         

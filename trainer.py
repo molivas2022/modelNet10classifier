@@ -93,8 +93,11 @@ class PointNetTrainer:
         return np.mean(batch_losses), np.mean(batch_accs)
 
 
-    def _save_checkpoint(self, epoch, name):
-        path = os.path.join(self.checkpoint_dir, f"{name}_epoch_{str(epoch).zfill(4)}.pth")
+    def _save_checkpoint(self, epoch, name, folder):
+        if epoch == None:
+            path = os.path.join(folder, f"{name}.pth")
+        else:
+            path = os.path.join(folder, f"{name}_epoch_{str(epoch).zfill(4)}.pth")
         torch.save(self.model.state_dict(), path)
 
 
@@ -127,13 +130,15 @@ class PointNetTrainer:
             self._log_epoch(epoch)
 
             if epoch % self.checkpoint_freq == 0:
-                self._save_checkpoint(epoch, self.name)
+                self._save_checkpoint(epoch, self.name, os.path.join(self.checkpoint_dir, "by_epoch"))
 
             if val_loss < self.best_model_loss:
                 self.best_model_loss = val_loss
                 self.best_model_acc = val_acc
                 self.best_model_epoch = epoch
-                self._save_checkpoint(epoch, f"{self.name}_best_model")
+                #self._save_checkpoint(epoch, f"{self.name}_best_model")
+                self._save_checkpoint(None, f"{self.name}_best_model", os.path.join(self.checkpoint_dir, "best_model"))
+                # TODO: guardar en algun lado el epoch del best_model
         
-        save_loss_dict(self.loss_dict, path=f"{self.name}_loss_dict.csv")
+        save_loss_dict(self.loss_dict, path=os.path.join("checkpoint", "csv", f"{self.name}_loss_dict.csv"))
         return self.loss_dict, self.best_model_epoch, self.best_model_loss, self.best_model_acc
