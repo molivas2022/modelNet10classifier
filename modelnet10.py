@@ -96,6 +96,7 @@ class ModelNet(Dataset):
         
         X = list()
         y = list()
+        rng = Random()
         for i in range(len(classes)):
             match type:
                 case DatasetType.TRAIN:
@@ -110,8 +111,11 @@ class ModelNet(Dataset):
                 points = np.asarray(pcd.points, dtype=float)
                 for _ in range(repetitions):
                     _points = np.copy(points)
-                    for t in transformations:
-                        _points = t.transform(_points)
+                    N = len(transformations)
+                    M = rng.randint(0, N)
+                    indices = sorted(rng.sample(range(N), M))
+                    for idx in indices:
+                        _points = transformations[idx].transform(_points)
                     if normalize:
                         _points = Normalization.transform(_points)
                     X.append(_points)
