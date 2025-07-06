@@ -214,11 +214,13 @@ class PointNetClassifier(nn.Module):
         x = self.bn1(self.act(self.shared_mlp1(x)))
         x = self.bn2(self.act(self.shared_mlp2(x)))
 
+
         if not self.ignore_Tnet:
             # Transformación de features
             feature_matrix = self.feature_transform(x)
             # x = torch.bmm(x.tranpose(2, 1), feature_matrix).tranpose(2, 1)
             x = torch.transpose(torch.bmm(torch.transpose(x, 2, 1), feature_matrix), 2, 1)
+
 
         # Paso a través de las segundas MLPs compartidas
         x = self.bn3(self.act(self.shared_mlp3(x)))
@@ -246,7 +248,7 @@ class PointNetClassifier(nn.Module):
 
 ## PointNetKAN
 class PointNetKAN(nn.Module):
-    def __init__(self, input_channels, num_points, num_classes, scaling=3.0):
+    def __init__(self, input_channels, num_points, num_classes, scaling=1.0):
         super(PointNetKAN, self).__init__()
 
         # T-Net en los puntos de la entrada
@@ -263,15 +265,20 @@ class PointNetKAN(nn.Module):
 
     def forward(self, x):
 
+
         input_matrix = self.input_transform(x)
 
+        #x = transpose(torch.bmm(torch.transpose(x, 2, 1), input_matrix), 2, 1)
         x = torch.transpose(torch.bmm(torch.transpose(x, 2, 1), input_matrix), 2, 1)
 
-        x = self.jacobikan5(input_matrix)
+
+        x = self.jacobikan5(x)
+
 
         feature_matrix = self.feature_transform(x)
 
         x = torch.transpose(torch.bmm(torch.transpose(x, 2, 1), feature_matrix), 2, 1)
+
 
         x = self.bn5(x)
 
