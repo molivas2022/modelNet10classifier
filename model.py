@@ -253,6 +253,10 @@ class PointNetKAN(nn.Module):
         self.input_transform = Tnet(input_channels, num_points)
 
         self.jacobikan5 = KANShared(input_channels, int(num_points * scaling), 4)
+
+        # T-Net en las features
+        self.feature_transform = Tnet(int(num_points * scaling), num_points)
+
         self.jacobikan6 = KAN(int(num_points * scaling), num_classes, 4)
 
         self.bn5 = nn.BatchNorm1d(int(num_points * scaling))
@@ -260,16 +264,22 @@ class PointNetKAN(nn.Module):
     def forward(self, x):
 
         input_matrix = self.input_transform(x)
+
+        x = torch.transpose(torch.bmm(torch.transpose(x, 2, 1), input_matrix), 2, 1)
+
         x = self.jacobikan5(input_matrix)
+
+        feature_matrix = self.feature_transform(x)
+
+        x = torch.transpose(torch.bmm(torch.transpose(x, 2, 1), feature_matrix), 2, 1)
+
         x = self.bn5(x)
 
         global_feature = F.max_pool1d(x, kernel_size=x.size(-1)).squeeze(-1)
 
         x = self.jacobikan6(global_feature)
 
-        # Los modelos que hemos estado usando outputtean critical points y la matriz de transformación,
-        # por ahora PointNetKAN no hace las dos últimas, y este es un parche de adaptabilidad.
-        return x, None, None
+        return x, None, feature_matrix
 
 
 # Clase para el cómputo de la pérdida
