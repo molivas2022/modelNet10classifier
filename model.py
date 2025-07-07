@@ -200,7 +200,6 @@ class PointNetClassifier(nn.Module):
         self.linear3 = nn.Linear(256, num_classes)
     
     def forward(self, x):
-
         # Tamaño del batch, es decir cuantos ejemplos hay en el batch
         bs = x.shape[0]
 
@@ -248,8 +247,10 @@ class PointNetClassifier(nn.Module):
 
 ## PointNetKAN
 class PointNetKAN(nn.Module):
-    def __init__(self, input_channels, num_points, num_classes, scaling=1.0):
+    def __init__(self, input_channels, num_points, num_classes, scaling=1.0, ignore_Tnet=False):
         super(PointNetKAN, self).__init__()
+
+        self.ignore_Tnet = ignore_Tnet
 
         # T-Net en los puntos de la entrada
         self.input_transform = Tnet(input_channels, num_points)
@@ -266,18 +267,19 @@ class PointNetKAN(nn.Module):
     def forward(self, x):
 
 
-        input_matrix = self.input_transform(x)
 
-        #x = transpose(torch.bmm(torch.transpose(x, 2, 1), input_matrix), 2, 1)
-        x = torch.transpose(torch.bmm(torch.transpose(x, 2, 1), input_matrix), 2, 1)
+
+        if not self.ignore_Tnet:
+            input_matrix = self.input_transform(x)
+            #x = transpose(torch.bmm(torch.transpose(x, 2, 1), input_matrix), 2, 1)
+            x = torch.transpose(torch.bmm(torch.transpose(x, 2, 1), input_matrix), 2, 1)
 
 
         x = self.jacobikan5(x)
 
-
-        feature_matrix = self.feature_transform(x)
-
-        x = torch.transpose(torch.bmm(torch.transpose(x, 2, 1), feature_matrix), 2, 1)
+        if not self.ignore_Tnet:
+            feature_matrix = self.feature_transform(x)
+            x = torch.transpose(torch.bmm(torch.transpose(x, 2, 1), feature_matrix), 2, 1)
 
 
         x = self.bn5(x)
@@ -286,7 +288,84 @@ class PointNetKAN(nn.Module):
 
         x = self.jacobikan6(global_feature)
 
-        return x, None, feature_matrix
+        if not self.ignore_Tnet:
+            return x, None, feature_matrix
+        else:
+            return x, None, None
+
+
+## Wrapper para Test-time augmentation
+"""
+Wrappea un clasificador f, un merge-mode m, una lista de transformaciones \{T_1, \ldots, T_n\}, y un input x, genera
+una secuencia de inputs \{T_1(x), \ldots, T_n(x)\}, tal que y = m(T_1(x), \ldots, T_n(x)).
+Args:
+    classifier          El clasificador al que wrappea. 
+    transformations     Las transformaciones a aplicar al input (iterable).
+    merge_mode          Método que utiliza para combinar predicciones en una.
+"""
+class TTAClassifier(nn.Module):
+    def __init__(self,  classifier, transformations: list, merge_mode):
+        super(TTAClassifier, self).__init__()
+        self.classifier = classifier
+        self.transformations = transformations
+        self.merge_mode = merge_mode
+
+    # Importante, este aplica softmax, no tiene mucho sentido aplicar el promedio sobre los logits.
+    def forward(self, x):
+
+        def apply_along_axis(function, x, axis):
+            return torch.stack([
+                function(x_i) for x_i in torch.unbind(x, dim=axis)
+            ], dim=axis)
+
+        
+        Tx = [x] 
+        x = torch.transpose(x, 2, 1)
+        # Aplicamos las transformaciones.
+        for T in self.transformations:
+            transformed_batch = apply_along_axis(
+                    lambda y: torch.from_numpy(T.transform(y.cpu().numpy())).to(dtype=torch.float32, device=y.device),
+                    x,
+                    0
+            ) # (B, N, C)
+            transformed_batch = torch.transpose(transformed_batch, 2, 1)
+            Tx.append(transformed_batch)
+
+        probs_list = list()
+        for Tx_i in Tx:
+            logits, _, _ = self.classifier(Tx_i) # (B, N_CLASSES)
+            probs = F.softmax(logits, dim=-1)
+            probs_list.append(probs)
+
+        probs_stacked = torch.stack(probs_list, dim=0) # (N_T, B, N_CLASSES)
+
+        def geometric_mean(tensor, dim=0, eps=1e-9):
+            tensor = tensor.clamp(min=eps)
+            log_tensor = torch.log(tensor)
+            mean_log = log_tensor.mean(dim=dim)
+            return torch.exp(mean_log)
+        
+        if self.merge_mode == "mean":
+            out = probs_stacked.mean(dim=0) # (B, N_CLASSES)
+        elif self.merge_mode == "gmean":
+            out = geometric_mean(probs_stacked, dim=0)
+        elif self.merge_mode == "max":
+            out = probs_stacked.max(dim=0).values
+
+
+        return out, None, None
+
+
+
+
+    def eval(self):
+        self.classifier.eval()
+        return super().eval()
+
+
+
+        
+
 
 
 # Clase para el cómputo de la pérdida
