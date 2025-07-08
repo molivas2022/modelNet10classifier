@@ -432,7 +432,8 @@ class PointNetLoss(nn.Module):
             reg = self.reg_weight * reg
         
         focal_loss = ((1 - pn)**self.gamma * ce_loss)
+        print(type(reg))
         if self.size_average:
-            return focal_loss.mean() + reg
+            return focal_loss.mean() + reg, reg
         else:
-            return focal_loss.sum() + reg
+            return focal_loss.sum() + reg, reg

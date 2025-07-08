@@ -5,7 +5,7 @@ def save_loss_dict(loss_dict, path="loss_dict.csv"):
 
     with open(path, mode="w", newline="") as file:
         writer = csv.writer(file)
-        writer.writerow(["epoch", "set", "loss", "acc"])
+        writer.writerow(["epoch", "set", "loss", "acc", "reg"])
 
         for epoch in range(num_epochs):
             for set in ["train", "valid"]:
@@ -14,5 +14,6 @@ def save_loss_dict(loss_dict, path="loss_dict.csv"):
                     set,
                     loss_dict[set]["loss"][epoch],
                     loss_dict[set]["acc"][epoch],
+                    loss_dict[set]["reg"][epoch]
                 ]
                 writer.writerow(row)
