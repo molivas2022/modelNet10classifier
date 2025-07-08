@@ -3,6 +3,17 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+def get_norm_layer(norm_type, num_channels, dim='1d', num_groups=8):
+    if norm_type == 'batchnorm':
+        return nn.BatchNorm1d(num_channels) if dim == '1d' else nn.BatchNorm2d(num_channels)
+    elif norm_type == 'groupnorm':
+        return nn.GroupNorm(num_groups=min(num_groups, num_channels), num_channels=num_channels)
+    elif norm_type == 'layernorm':
+        return nn.LayerNorm(num_channels)
+    elif norm_type is None or norm_type == 'none':
+        return nn.Identity()
+    else:
+        raise ValueError(f"Undefined norm type")
 
 ## KAN, créditos a Ali Kashefi (https://github.com/Ali-Stanford/PointNet_KAN_Graphic)
 """
@@ -95,7 +106,7 @@ Args:
     num_points: número de puntos
 """
 class Tnet(nn.Module):
-    def __init__(self, dim, num_points):
+    def __init__(self, dim, num_points, norm_type='batchnorm'):
         super(Tnet, self).__init__()
 
         self.dim = dim
@@ -107,9 +118,9 @@ class Tnet(nn.Module):
         self.shared_mlp1 = nn.Conv1d(dim, 64, kernel_size=1)
         self.shared_mlp2 = nn.Conv1d(64, 128, kernel_size=1)
         self.shared_mlp3 = nn.Conv1d(128, 1024, kernel_size=1)
-        self.bn1 = nn.BatchNorm1d(64)
-        self.bn2 = nn.BatchNorm1d(128)
-        self.bn3 = nn.BatchNorm1d(1024)
+        self.bn1 = get_norm_layer(norm_type, 64)
+        self.bn2 = get_norm_layer(norm_type, 128)
+        self.bn3 = get_norm_layer(norm_type, 1024)
 
         self.max_pool = nn.MaxPool1d(kernel_size=num_points)
 
@@ -117,8 +128,8 @@ class Tnet(nn.Module):
         self.linear1 = nn.Linear(1024, 512)
         self.linear2 = nn.Linear(512, 256)
         self.linear3 = nn.Linear(256, dim**2)
-        self.bn4 = nn.BatchNorm1d(512)
-        self.bn5 = nn.BatchNorm1d(256)
+        self.bn4 = get_norm_layer(norm_type, 512)
+        self.bn5 = get_norm_layer(norm_type, 256)
     
     def forward(self, x):
         bs = x.shape[0]
@@ -158,7 +169,7 @@ Args:
     num_classes: número de categorias de clasificación
 """
 class PointNetClassifier(nn.Module):
-    def __init__(self, dim, num_points, num_global_feats, num_classes, ignore_Tnet=False):
+    def __init__(self, dim, num_points, num_global_feats, num_classes, ignore_Tnet=False, norm_type='batchnorm', dropout=0.3):
         super(PointNetClassifier, self).__init__()
         self.ignore_Tnet = ignore_Tnet
 
@@ -171,8 +182,8 @@ class PointNetClassifier(nn.Module):
         # Primera MLP compartida, transforma los puntos de la entrada en features
         self.shared_mlp1 = nn.Conv1d(3, 64, kernel_size=1)
         self.shared_mlp2 = nn.Conv1d(64, 64, kernel_size=1)
-        self.bn1 = nn.BatchNorm1d(64)
-        self.bn2 = nn.BatchNorm1d(64)
+        self.bn1 = get_norm_layer(norm_type, 64)
+        self.bn2 = get_norm_layer(norm_type, 64)
 
         # T-Net en las features
         self.feature_transform = Tnet(64, num_points)
@@ -181,9 +192,9 @@ class PointNetClassifier(nn.Module):
         self.shared_mlp3 = nn.Conv1d(64, 64, kernel_size=1)
         self.shared_mlp4 = nn.Conv1d(64, 128, kernel_size=1)
         self.shared_mlp5 = nn.Conv1d(128, num_global_feats, kernel_size=1)
-        self.bn3 = nn.BatchNorm1d(64)
-        self.bn4 = nn.BatchNorm1d(128)
-        self.bn5 = nn.BatchNorm1d(num_global_feats)
+        self.bn3 = get_norm_layer(norm_type, 64)
+        self.bn4 = get_norm_layer(norm_type, 128)
+        self.bn5 = get_norm_layer(norm_type, num_global_feats)
         # Max pool para extraer las features globales
         # Devolver los indices nos permite ver los indices críticos que determinan las features globales
         self.max_pool = nn.MaxPool1d(kernel_size=num_points, return_indices=True)
@@ -191,9 +202,9 @@ class PointNetClassifier(nn.Module):
         # MLP para clasificación
         self.linear1 = nn.Linear(num_global_feats, 512)
         self.linear2 = nn.Linear(512, 256)
-        self.bn_linear1 = nn.BatchNorm1d(512)
-        self.bn_linear2 = nn.BatchNorm1d(256)
-        self.dropout = nn.Dropout(p=0.3)
+        self.bn_linear1 = get_norm_layer(norm_type, 512)
+        self.bn_linear2 = get_norm_layer(norm_type, 256)
+        self.dropout = nn.Dropout(p=dropout)
         #self.dropout = nn.Dropout(p=0.2)
 
         # Output layer
