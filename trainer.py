@@ -30,8 +30,8 @@ class PointNetTrainer:
         self.checkpoint_freq = checkpoint_freq
 
         self.loss_dict = {
-                "train": {"loss": [], "acc": []},
-                "valid": {"loss": [], "acc": []}
+                "train": {"loss": [], "acc": [], "reg": []},
+                "valid": {"loss": [], "acc": [], "reg": []}
         }
         self.best_model_loss = float('inf')
         self.best_model_acc = 0.0
@@ -41,7 +41,7 @@ class PointNetTrainer:
 
     def _train_epoch(self):
         self.model = self.model.train()
-        batch_losses, batch_accs = list(), list()
+        batch_losses, batch_accs, batch_regs = list(), list(), list()
 
         for pcds, labels in self.train_loader:
             pcds, labels = pcds.to(self.device), labels.squeeze().to(self.device)
@@ -51,7 +51,7 @@ class PointNetTrainer:
 
             # Hacemos predicciones, calculamos pérdida
             out, _, A = self.model(pcds)
-            loss = self.criterion(out, labels, A, is_train=True)
+            loss, reg = self.criterion(out, labels, A, is_train=True)
 
             # Hacemos backprop, optimizamos
             loss.backward()
@@ -69,19 +69,22 @@ class PointNetTrainer:
 
             batch_losses.append(loss.item())
             batch_accs.append(acc)
+            batch_regs.append(reg.item())
+            print(type(reg.item()))
 
-        return np.mean(batch_losses), np.mean(batch_accs)
+
+        return np.mean(batch_losses), np.mean(batch_accs), np.mean(batch_regs)
 
 
     def _validate_epoch(self):
         self.model = self.model.eval()
-        batch_losses, batch_accs = list(), list()
+        batch_losses, batch_accs, batch_regs = list(), list(), list()
 
         with torch.no_grad():
             for pcds, labels in self.val_loader:
                 pcds, labels = pcds.to(self.device), labels.squeeze().to(self.device)
                 out, _, A = self.model(pcds)
-                loss = self.criterion(out, labels, A, is_train=False)
+                loss, reg = self.criterion(out, labels, A, is_train=False)
 
                 preds = torch.softmax(out, dim=1).argmax(dim=1)
                 correct = preds.eq(labels.data).cpu().sum()
@@ -89,8 +92,9 @@ class PointNetTrainer:
 
                 batch_losses.append(loss.item())
                 batch_accs.append(acc)
+                batch_regs.append(reg.item())
 
-        return np.mean(batch_losses), np.mean(batch_accs)
+        return np.mean(batch_losses), np.mean(batch_accs), np.mean(batch_regs)
 
 
     def _save_checkpoint(self, epoch, name, folder):
@@ -119,13 +123,15 @@ class PointNetTrainer:
 
     def fit(self, epochs):
         for epoch in range(1, epochs + 1):
-            train_loss, train_acc = self._train_epoch()
-            val_loss, val_acc = self._validate_epoch()
+            train_loss, train_acc, train_reg = self._train_epoch()
+            val_loss, val_acc, val_reg = self._validate_epoch()
 
             self.loss_dict["train"]["loss"].append(train_loss)
             self.loss_dict["train"]["acc"].append(train_acc)
+            self.loss_dict["train"]["reg"].append(train_reg)
             self.loss_dict["valid"]["loss"].append(val_loss)
             self.loss_dict["valid"]["acc"].append(val_acc)
+            self.loss_dict["valid"]["reg"].append(val_reg)
 
             self._log_epoch(epoch)
 
