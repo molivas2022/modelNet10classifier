@@ -420,7 +420,8 @@ class PointNetLoss(nn.Module):
 
         # Factor de regularización matriz transformación
         reg = 0.0
-        if self.reg_weight > 0 and is_train:
+        #if self.reg_weight > 0 and is_train:
+        if self.reg_weight > 0:
             I = torch.eye(A.size(1)).unsqueeze(0).repeat(A.size(0), 1, 1)
             if A.is_cuda:
                 I = I.cuda()
@@ -432,7 +433,6 @@ class PointNetLoss(nn.Module):
             reg = self.reg_weight * reg
         
         focal_loss = ((1 - pn)**self.gamma * ce_loss)
-        print(type(reg))
         if self.size_average:
             return focal_loss.mean() + reg, reg
         else:

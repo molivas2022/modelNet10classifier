@@ -69,8 +69,7 @@ class PointNetTrainer:
 
             batch_losses.append(loss.item())
             batch_accs.append(acc)
-            batch_regs.append(reg.item())
-            print(type(reg.item()))
+            batch_regs.append(reg.cpu().detach())
 
 
         return np.mean(batch_losses), np.mean(batch_accs), np.mean(batch_regs)
@@ -92,7 +91,7 @@ class PointNetTrainer:
 
                 batch_losses.append(loss.item())
                 batch_accs.append(acc)
-                batch_regs.append(reg.item())
+                batch_regs.append(reg.cpu().detach())
 
         return np.mean(batch_losses), np.mean(batch_accs), np.mean(batch_regs)
 
