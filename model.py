@@ -264,34 +264,22 @@ class PointNetKAN(nn.Module):
         self.ignore_Tnet = ignore_Tnet
 
         # T-Net en los puntos de la entrada
-        self.input_transform = Tnet(input_channels, num_points)
+        if not ignore_Tnet:
+            self.input_transform = Tnet(input_channels, num_points)
 
         self.jacobikan5 = KANShared(input_channels, int(num_points * scaling), 4)
 
-        # T-Net en las features
-        self.feature_transform = Tnet(int(num_points * scaling), num_points)
-
         self.jacobikan6 = KAN(int(num_points * scaling), num_classes, 4)
 
-        self.bn5 = nn.BatchNorm1d(int(num_points * scaling))
+        self.bn5 = nn.GroupNorm(num_channels=int(num_points * scaling), num_groups=8)
 
     def forward(self, x):
-
-
-
-
         if not self.ignore_Tnet:
             input_matrix = self.input_transform(x)
             #x = transpose(torch.bmm(torch.transpose(x, 2, 1), input_matrix), 2, 1)
             x = torch.transpose(torch.bmm(torch.transpose(x, 2, 1), input_matrix), 2, 1)
 
-
         x = self.jacobikan5(x)
-
-        if not self.ignore_Tnet:
-            feature_matrix = self.feature_transform(x)
-            x = torch.transpose(torch.bmm(torch.transpose(x, 2, 1), feature_matrix), 2, 1)
-
 
         x = self.bn5(x)
 
@@ -299,10 +287,7 @@ class PointNetKAN(nn.Module):
 
         x = self.jacobikan6(global_feature)
 
-        if not self.ignore_Tnet:
-            return x, None, feature_matrix
-        else:
-            return x, None, None
+        return x, None, None
 
 
 ## Wrapper para Test-time augmentation
@@ -419,7 +404,7 @@ class PointNetLoss(nn.Module):
         pn = pn.gather(1, targets.view(-1, 1)).view(-1)
 
         # Factor de regularización matriz transformación
-        reg = 0.0
+        reg = torch.tensor(0.0)
         #if self.reg_weight > 0 and is_train:
         if self.reg_weight > 0:
             I = torch.eye(A.size(1)).unsqueeze(0).repeat(A.size(0), 1, 1)
