@@ -14,6 +14,8 @@ DATASET_DIR = os.path.join(ROOT_DIR, "ModelNet10", "pcd")
 VALIDATION_SEED = 0x5EED    # Un número arbitario que determina la partición del set de validación
 VALIDATION_RATIO = 0.2
 
+TRANSFORMATION_SEED = 0x5EED # Un número arbitrario que determina qué transformaciones aplicar.
+
 class ModelNetClass(Enum):
     def __init__(self, label, train_size, test_size):
         self._label = label
@@ -96,7 +98,7 @@ class ModelNet(Dataset):
         
         X = list()
         y = list()
-        rng = Random()
+        rng = Random(TRANSFORMATION_SEED)
         for i in range(len(classes)):
             match type:
                 case DatasetType.TRAIN:
