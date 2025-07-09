@@ -63,7 +63,6 @@ class ModelNetClass(Enum):
         dataset_dir = os.path.join(root_dir, "ModelNet10", "pcd")
         return os.path.join(dataset_dir, self.label, "test")
 
-    @property
     def train_files(self, root_dir=None):
         path = self.train_path(root_dir)
         files = list()
@@ -71,16 +70,16 @@ class ModelNetClass(Enum):
             if ".pcd" in str(file):
                 files.append(file)
         return sorted(files, key=lambda f: f.name)
-    @property
+
     def effective_train_files(self, root_dir=None):
         return [file for file in self.train_files(root_dir) if file not in self.validation_files]
-    @property
+
     def validation_files(self, root_dir=None):
         train_files = self.train_files(root_dir)
         rng = Random(VALIDATION_SEED)
         return rng.sample(train_files, self.validation_size)
-    @property
-    def test_files(self):
+
+    def test_files(self, root_dir=None):
         path = self.test_path(root_dir)
         files = list()
         for file in os.scandir(path):  
@@ -103,18 +102,19 @@ class ModelNet(Dataset):
                  preserve_original: bool=True,
                  root_dir=None
                  ):
-        
+
+        self.root_dir = root_dir    
         X = list()
         y = list()
         rng = Random(TRANSFORMATION_SEED)
         for i in range(len(classes)):
             match type:
                 case DatasetType.TRAIN:
-                    files = classes[i].effective_train_files
+                    files = classes[i].effective_train_files(root_dir)
                 case DatasetType.VALIDATION:
-                    files = classes[i].validation_files
+                    files = classes[i].validation_files(root_dir)
                 case DatasetType.TEST:
-                    files = classes[i].test_files
+                    files = classes[i].test_files(root_dir)
 
             for file in files:
                 pcd = o3d.io.read_point_cloud(file.path)
