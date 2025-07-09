@@ -6,6 +6,7 @@ pio.renderers.default = "notebook"
 
 # Visualiza en un notebook un np.array de puntos de una pcd
 def notebook_plot_pcd_from_points(points, output_size=(700, 700), zoom=1.5):
+    pio.renderers.default = "colab"
     fig = go.Figure(
         data=[
             go.Scatter3d(
@@ -25,7 +26,7 @@ def notebook_plot_pcd_from_points(points, output_size=(700, 700), zoom=1.5):
             )
         )
     )
-    fig.show()
+    fig.show(renderer="colab")
 
 # Visualiza en un notebook un archivo .pcd
 def notebook_plot_pcd_from_file(path, output_size=(700, 700), zoom=1.5):
