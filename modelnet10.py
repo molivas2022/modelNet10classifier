@@ -8,8 +8,6 @@ from utils.transformation import Transformation, Normalization
 import open3d as o3d
 import numpy as np
 
-ROOT_DIR = os.getcwd()
-DATASET_DIR = os.path.join(ROOT_DIR, "ModelNet10", "pcd")
 
 VALIDATION_SEED = 0x5EED    # Un número arbitario que determina la partición del set de validación
 VALIDATION_RATIO = 0.2
@@ -17,10 +15,17 @@ VALIDATION_RATIO = 0.2
 TRANSFORMATION_SEED = 0x5EED # Un número arbitrario que determina qué transformaciones aplicar.
 
 class ModelNetClass(Enum):
-    def __init__(self, label, train_size, test_size):
+    def __init__(self, label, train_size, test_size, root_dir=None):
         self._label = label
         self._train_size = train_size   # train + validation
         self._test_size = test_size
+        if root_dir:
+            self.root_dir = root_dir
+        else:
+            self.root_dir = os.getcwd()
+
+        self.dataset_dir = os.path.join(self.root_dir, "ModelNet10", "pcd")
+
 
     
     BATHTUB = ('bathtub', 106, 50)
@@ -53,10 +58,12 @@ class ModelNetClass(Enum):
         return self._test_size
     @property
     def train_path(self):
-        return os.path.join(DATASET_DIR, self.label, "train")
+        if root_dir:
+
+        return os.path.join(datasaet_dir, self.label, "train")
     @property
     def test_path(self):
-        return os.path.join(DATASET_DIR, self.label, "test")
+        return os.path.join(dataset_dir, self.label, "test")
     @property
     def train_files(self):
         path = self.train_path
