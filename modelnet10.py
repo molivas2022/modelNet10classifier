@@ -15,16 +15,10 @@ VALIDATION_RATIO = 0.2
 TRANSFORMATION_SEED = 0x5EED # Un número arbitrario que determina qué transformaciones aplicar.
 
 class ModelNetClass(Enum):
-    def __init__(self, label, train_size, test_size, root_dir=None):
+    def __init__(self, label, train_size, test_size):
         self._label = label
         self._train_size = train_size   # train + validation
         self._test_size = test_size
-        if root_dir:
-            self.root_dir = root_dir
-        else:
-            self.root_dir = os.getcwd()
-
-        self.dataset_dir = os.path.join(self.root_dir, "ModelNet10", "pcd")
 
 
     
@@ -56,33 +50,38 @@ class ModelNetClass(Enum):
     @property
     def test_size(self):
         return self._test_size
-    @property
-    def train_path(self):
-        if root_dir:
 
-        return os.path.join(datasaet_dir, self.label, "train")
-    @property
-    def test_path(self):
+    def train_path(self, root_dir=None):
+        if not root_dir:
+            root_dir = os.getcwd()
+        dataset_dir = os.path.join(root_dir, "ModelNet10", "pcd")
+        return os.path.join(dataset_dir, self.label, "train")
+
+    def test_path(self, root_dir=None):
+        if not root_dir:
+            root_dir = os.getcwd()
+        dataset_dir = os.path.join(root_dir, "ModelNet10", "pcd")
         return os.path.join(dataset_dir, self.label, "test")
+
     @property
-    def train_files(self):
-        path = self.train_path
+    def train_files(self, root_dir=None):
+        path = self.train_path(root_dir)
         files = list()
         for file in os.scandir(path):  
             if ".pcd" in str(file):
                 files.append(file)
         return sorted(files, key=lambda f: f.name)
     @property
-    def effective_train_files(self):
-        return [file for file in self.train_files if file not in self.validation_files]
+    def effective_train_files(self, root_dir=None):
+        return [file for file in self.train_files(root_dir) if file not in self.validation_files]
     @property
-    def validation_files(self):
-        train_files = self.train_files
+    def validation_files(self, root_dir=None):
+        train_files = self.train_files(root_dir)
         rng = Random(VALIDATION_SEED)
         return rng.sample(train_files, self.validation_size)
     @property
     def test_files(self):
-        path = self.test_path
+        path = self.test_path(root_dir)
         files = list()
         for file in os.scandir(path):  
             if ".pcd" in str(file):
@@ -101,7 +100,9 @@ class ModelNet(Dataset):
                  repetitions: int =0,
                  transformations: List[Transformation] =[],
                  normalize: bool=True,
-                 preserve_original: bool=True):
+                 preserve_original: bool=True,
+                 root_dir=None
+                 ):
         
         X = list()
         y = list()
