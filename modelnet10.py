@@ -72,7 +72,7 @@ class ModelNetClass(Enum):
         return sorted(files, key=lambda f: f.name)
 
     def effective_train_files(self, root_dir=None):
-        return [file for file in self.train_files(root_dir) if file not in self.validation_files]
+        return [file for file in self.train_files(root_dir) if file not in self.validation_files(root_dir)]
 
     def validation_files(self, root_dir=None):
         train_files = self.train_files(root_dir)
