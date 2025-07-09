@@ -26,7 +26,9 @@ def notebook_plot_pcd_from_points(points, output_size=(700, 700), zoom=1.5):
             )
         )
     )
-    fig.show(renderer="colab")
+    # fig.show(renderer="colab")
+    return fig
+
 
 # Visualiza en un notebook un archivo .pcd
 def notebook_plot_pcd_from_file(path, output_size=(700, 700), zoom=1.5):
